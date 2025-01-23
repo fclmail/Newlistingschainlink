@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ERC20 Listings</title>
+  <script src="https://cdn.jsdelivr.net/npm/ethers/dist/ethers.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: #001f3f;
+      color: white;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 20px auto;
+      padding: 20px;
+      background: #002a5c;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+      border-radius: 8px;
+    }
+    h1 {
+      text-align: center;
+      color: #ffdd57;
+      margin-bottom: 20px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+    table, th, td {
+      border: 1px solid #555;
+    }
+    th, td {
+      padding: 10px;
+      text-align: center;
+    }
+    th {
+      background-color: #00509e;
+    }
+    tr:nth-child(even) {
+      background-color: #003f7d;
+    }
+    tr:nth-child(odd) {
+      background-color: #004a8c;
+    }
+    .loading {
+      text-align: center;
+      font-size: 18px;
+      margin-top: 20px;
+    }
+    .form-group {
+      margin: 20px 0;
+    }
+    .form-group label {
+      display: block;
+      margin-bottom: 5px;
+    }
+    .form-group input, .form-group button {
+      width: 100%;
+      padding: 10px;
+      font-size: 16px;
+      margin-bottom: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>ERC20 Listings</h1>
+    <div id="wallet-status">
+      <button onclick="connectWallet()">Connect Wallet</button>
+      <span id="wallet-address"></span>
+    </div>
+    <div class="form-group">
+      <label for="newToken">Suggest a Token Address:</label>
+      <input type="text" id="newToken" placeholder="Enter Token Address">
+      <button onclick="addToken()">Add Token</button>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Token Name</th>
+          <th>Token Address</th>
+          <th>Start Price</th>
+          <th>Current Price</th>
+          <th>Liquidity</th>
+        </tr>
+      </thead>
+      <tbody id="listings">
+        <tr>
+          <td colspan="5" class="loading">Loading new listings...</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <script>
+    const provider = new ethers.providers.JsonRpcProvider("https://polygon-rpc.com");
+    let signer, walletAddress;
+    const tokens = [
+      { name: "USDC", address: "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174" },
+      { name: "WMATIC", address: "0x0d500B1D8E8eD943A9cDCA936E503B4257C83b33" },
+      { name: "QUICK", address: "0x831753DD7087CaC61aB5644b308642cc1c33Dc13" },
+    ];
+    const chainlinkOracles = {
+      "USDC/USD": "0x572dDec9087154dC5dfBB1546Bb62713147e0Ab0",
+    };
+
+    async function connectWallet() {
+      if (window.ethereum) {
+        const ethersProvider = new ethers.providers.Web3Provider(window.ethereum);
+        await ethersProvider.send("eth_requestAccounts", []);
+        signer = ethersProvider.getSigner();
+        walletAddress = await signer.getAddress();
+        document.getElementById("wallet-address").innerText = `Wallet: ${walletAddress}`;
+      } else {
+        alert("MetaMask is not installed. Please install it to use this feature.");
+      }
+    }
+
+    async function fetchTokenData() {
+      const listingsTable = document.getElementById("listings");
+      listingsTable.innerHTML = ""; // Clear existing rows
+
+      for (const token of tokens) {
+        try {
+          const startPrice = await getLivePrice("USDC/USD");
+          const currentPrice = await getLivePrice("USDC/USD");
+          const liquidity = await getLiquidity(token.address);
+
+          const row = document.createElement("tr");
+          row.innerHTML = `
+            <td>${token.name}</td>
+            <td>${token.address}</td>
+            <td>$${startPrice.toFixed(4)}</td>
+            <td>$${currentPrice.toFixed(4)}</td>
+            <td>${liquidity.toFixed(2)} USDC</td>
+          `;
+          listingsTable.appendChild(row);
+        } catch (error) {
+          console.error(`Error fetching data for ${token.name}:`, error);
+        }
+      }
+    }
+
+    async function getLivePrice(pair) {
+      const oracleAddress = chainlinkOracles[pair];
+      if (!oracleAddress) throw new Error(`No Chainlink oracle address for pair: ${pair}`);
+
+      const oracle = new ethers.Contract(oracleAddress, ["function latestAnswer() public view returns (int256)"], provider);
+      const price = await oracle.latestAnswer();
+      return parseFloat(ethers.utils.formatUnits(price, 8));
+    }
+
+    async function getLiquidity(tokenAddress) {
+      // Mock: Replace with a DEX API call or smart contract call for liquidity
+      return Math.random() * 10000;
+    }
+
+    function addToken() {
+      const newTokenAddress = document.getElementById("newToken").value.trim();
+      if (!ethers.utils.isAddress(newTokenAddress)) {
+        alert("Invalid token address.");
+        return;
+      }
+      tokens.push({ name: `Token ${tokens.length + 1}`, address: newTokenAddress });
+      alert("Token added! It will appear in the next refresh.");
+    }
+
+    // Load data on page load
+    fetchTokenData();
+    setInterval(fetchTokenData, 60000); // Refresh data every 60 seconds
+  </script>
+</body>
+</html>
